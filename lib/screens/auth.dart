@@ -274,13 +274,35 @@ class _TypeCard extends StatelessWidget {
 // Sign up
 // ---------------------------------------------------------------------------
 
-class SignupScreen extends StatelessWidget {
+class SignupScreen extends StatefulWidget {
   const SignupScreen({super.key});
+
+  @override
+  State<SignupScreen> createState() => _SignupScreenState();
+}
+
+class _SignupScreenState extends State<SignupScreen> {
+  final _name = TextEditingController();
+  final _business = TextEditingController();
+  final _category = TextEditingController();
+  final _email = TextEditingController();
+  final _password = TextEditingController();
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _business.dispose();
+    _category.dispose();
+    _email.dispose();
+    _password.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final app = AppScope.of(context);
     final biz = app.mode == Mode.business;
+    final busy = app.authLoading;
     return SafeArea(
       child: _FillScroll(
         child: Padding(
@@ -288,7 +310,7 @@ class SignupScreen extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              BackTextButton(onTap: () => app.go(AppScreen.chooseType)),
+              BackTextButton(onTap: busy ? () {} : () => app.go(AppScreen.chooseType)),
               const SizedBox(height: 12),
               Pill(
                 text: biz ? 'Business account' : 'Personal account',
@@ -307,29 +329,61 @@ class SignupScreen extends StatelessWidget {
               ),
               if (biz) ...[
                 const SizedBox(height: 20),
-                const LabeledField(label: 'Business name', hint: 'Fig & Vine Café'),
+                LabeledField(
+                    label: 'Business name',
+                    hint: 'Fig & Vine Café',
+                    controller: _business,
+                    enabled: !busy),
                 const SizedBox(height: 16),
-                const LabeledField(label: 'Category', hint: 'Café & restaurant'),
+                LabeledField(
+                    label: 'Category',
+                    hint: 'Café & restaurant',
+                    controller: _category,
+                    enabled: !busy),
               ],
               const SizedBox(height: 16),
               LabeledField(
                 label: biz ? 'Owner name' : 'Full name',
                 hint: biz ? 'Jordan Lee' : 'Alex Rivera',
+                controller: _name,
+                enabled: !busy,
+                textInputAction: TextInputAction.next,
               ),
               const SizedBox(height: 16),
-              const LabeledField(
-                  label: 'Email',
-                  hint: 'you@email.com',
-                  keyboardType: TextInputType.emailAddress),
+              LabeledField(
+                label: 'Email',
+                hint: 'you@email.com',
+                controller: _email,
+                enabled: !busy,
+                keyboardType: TextInputType.emailAddress,
+                textInputAction: TextInputAction.next,
+              ),
               const SizedBox(height: 16),
-              const LabeledField(label: 'Password', hint: 'Create a password', obscure: true),
+              LabeledField(
+                label: 'Password',
+                hint: 'Create a password',
+                controller: _password,
+                enabled: !busy,
+                obscure: true,
+                textInputAction: TextInputAction.done,
+                onSubmitted: (_) => _submit(app),
+              ),
               const Spacer(),
               const SizedBox(height: 20),
-              _GoogleButton(label: 'Sign up with Google', onTap: app.googleAuthSignup),
+              if (app.authError != null) _AuthError(app.authError!),
+              _GoogleButton(
+                  label: 'Sign up with Google', onTap: busy ? null : app.googleAuth),
               const SizedBox(height: 16),
               const OrDivider(),
               const SizedBox(height: 16),
-              TButton(label: 'Create account', onTap: app.submitSignup),
+              TButton(
+                onTap: busy ? null : () => _submit(app),
+                child: busy
+                    ? const _BtnSpinner()
+                    : const Text('Create account',
+                        style: TextStyle(
+                            fontSize: 17, fontWeight: FontWeight.w700, color: Colors.white)),
+              ),
               const SizedBox(height: 16),
               FooterLink(
                 prompt: 'Already have an account?',
@@ -342,13 +396,24 @@ class SignupScreen extends StatelessWidget {
       ),
     );
   }
+
+  void _submit(AppState app) {
+    FocusScope.of(context).unfocus();
+    app.submitSignup(
+      email: _email.text,
+      password: _password.text,
+      fullName: _name.text,
+      businessName: _business.text,
+      category: _category.text,
+    );
+  }
 }
 
 class _GoogleButton extends StatelessWidget {
   const _GoogleButton({required this.label, required this.onTap});
 
   final String label;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -370,16 +435,82 @@ class _GoogleButton extends StatelessWidget {
   }
 }
 
+/// White spinner sized to sit inside a primary [TButton] while auth is in flight.
+class _BtnSpinner extends StatelessWidget {
+  const _BtnSpinner();
+
+  @override
+  Widget build(BuildContext context) {
+    return const SizedBox(
+      width: 22,
+      height: 22,
+      child: CircularProgressIndicator(strokeWidth: 2.4, color: Colors.white),
+    );
+  }
+}
+
+/// Inline error banner shown above the auth buttons.
+class _AuthError extends StatelessWidget {
+  const _AuthError(this.message);
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFBE9E7),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFF3C9C4)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.error_outline, size: 18, color: Color(0xFFC0392B)),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(message,
+                style: const TextStyle(
+                    fontSize: 13,
+                    height: 1.35,
+                    color: Color(0xFFB53225),
+                    fontWeight: FontWeight.w600)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Sign in
 // ---------------------------------------------------------------------------
 
-class SigninScreen extends StatelessWidget {
+class SigninScreen extends StatefulWidget {
   const SigninScreen({super.key});
+
+  @override
+  State<SigninScreen> createState() => _SigninScreenState();
+}
+
+class _SigninScreenState extends State<SigninScreen> {
+  final _email = TextEditingController();
+  final _password = TextEditingController();
+
+  @override
+  void dispose() {
+    _email.dispose();
+    _password.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final app = AppScope.of(context);
+    final busy = app.authLoading;
     return SafeArea(
       child: _FillScroll(
         child: Padding(
@@ -387,7 +518,7 @@ class SigninScreen extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              BackTextButton(onTap: () => app.go(AppScreen.onboard1)),
+              BackTextButton(onTap: busy ? () {} : () => app.go(AppScreen.onboard1)),
               const SizedBox(height: 16),
               const Text('Welcome back',
                   style: TextStyle(
@@ -417,12 +548,24 @@ class SigninScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 20),
-              const LabeledField(
-                  label: 'Email',
-                  hint: 'you@email.com',
-                  keyboardType: TextInputType.emailAddress),
+              LabeledField(
+                label: 'Email',
+                hint: 'you@email.com',
+                controller: _email,
+                enabled: !busy,
+                keyboardType: TextInputType.emailAddress,
+                textInputAction: TextInputAction.next,
+              ),
               const SizedBox(height: 16),
-              const LabeledField(label: 'Password', hint: 'Your password', obscure: true),
+              LabeledField(
+                label: 'Password',
+                hint: 'Your password',
+                controller: _password,
+                enabled: !busy,
+                obscure: true,
+                textInputAction: TextInputAction.done,
+                onSubmitted: (_) => _submit(app),
+              ),
               const SizedBox(height: 12),
               const Align(
                 alignment: Alignment.centerRight,
@@ -432,11 +575,20 @@ class SigninScreen extends StatelessWidget {
               ),
               const Spacer(),
               const SizedBox(height: 20),
-              _GoogleButton(label: 'Continue with Google', onTap: app.googleAuthSignin),
+              if (app.authError != null) _AuthError(app.authError!),
+              _GoogleButton(
+                  label: 'Continue with Google', onTap: busy ? null : app.googleAuth),
               const SizedBox(height: 16),
               const OrDivider(),
               const SizedBox(height: 16),
-              TButton(label: 'Sign in', onTap: app.submitSignin),
+              TButton(
+                onTap: busy ? null : () => _submit(app),
+                child: busy
+                    ? const _BtnSpinner()
+                    : const Text('Sign in',
+                        style: TextStyle(
+                            fontSize: 17, fontWeight: FontWeight.w700, color: Colors.white)),
+              ),
               const SizedBox(height: 16),
               FooterLink(
                 prompt: 'New to Tandem?',
@@ -448,6 +600,11 @@ class SigninScreen extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  void _submit(AppState app) {
+    FocusScope.of(context).unfocus();
+    app.submitSignin(email: _email.text, password: _password.text);
   }
 }
 

@@ -152,8 +152,8 @@ class HomeScreen extends StatelessWidget {
           children: [
             _HomeHeader(
               eyebrow: 'Good evening',
-              title: 'Alex Rivera',
-              avatar: const Avatar(initials: 'AR', color: T.indigo, fontSize: 16),
+              title: app.displayName,
+              avatar: Avatar(initials: app.initials, color: T.indigo, fontSize: 16),
               onLogout: app.logout,
             ),
             const SizedBox(height: 18),
@@ -301,9 +301,9 @@ class HomeBizScreen extends StatelessWidget {
           children: [
             _HomeHeader(
               eyebrow: 'Signed in as',
-              title: 'Fig & Vine Café',
-              avatar: const Avatar(
-                  initials: 'FV', color: T.ink, fontSize: 16, radius: 14),
+              title: app.displayName,
+              avatar: Avatar(
+                  initials: app.initials, color: T.ink, fontSize: 16, radius: 14),
               onLogout: app.logout,
             ),
             const SizedBox(height: 18),

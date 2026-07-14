@@ -106,6 +106,17 @@ class AppState extends ChangeNotifier {
   ActivityItem? receipt;
   AppScreen prevScreen = AppScreen.home;
 
+  // Auth UI state.
+  bool authLoading = false;
+  String? authError;
+  StreamSubscription<AuthState>? _authSub;
+
+  AppState() {
+    if (SupabaseConfig.isConfigured) {
+      _authSub = Supabase.instance.client.auth.onAuthStateChange.listen(_onAuthChange);
+    }
+  }
+
   final List<Timer> _timers = [];
 
   void _after(int ms, VoidCallback fn) => _timers.add(Timer(Duration(milliseconds: ms), fn));
@@ -120,6 +131,7 @@ class AppState extends ChangeNotifier {
   @override
   void dispose() {
     _clearTimers();
+    _authSub?.cancel();
     super.dispose();
   }
 
@@ -149,41 +161,180 @@ class AppState extends ChangeNotifier {
   }
 
   // ---- auth ----
-  void getStarted() => go(AppScreen.chooseType);
+  bool get _configured => SupabaseConfig.isConfigured;
+  SupabaseClient get _sb => Supabase.instance.client;
+  User? get _user => _configured ? _sb.auth.currentUser : null;
 
-  void logout() {
-    linkedApple = false;
-    linkedGoogle = false;
-    signinMode = Mode.personal;
-    go(AppScreen.onboard1);
+  String get accountEmail => _user?.email ?? '';
+
+  /// Name shown in the home header — business name for businesses, the person's
+  /// name otherwise, falling back to the email local-part.
+  String get displayName {
+    final meta = _user?.userMetadata ?? const <String, dynamic>{};
+    if (mode == Mode.business) {
+      final biz = (meta['business_name'] as String?)?.trim();
+      if (biz != null && biz.isNotEmpty) return biz;
+      return 'Your business';
+    }
+    final name = (meta['full_name'] as String?)?.trim();
+    if (name != null && name.isNotEmpty) return name;
+    final email = accountEmail;
+    return email.isNotEmpty ? email.split('@').first : 'You';
   }
+
+  String get initials {
+    final parts =
+        displayName.split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
+    if (parts.isEmpty) return '?';
+    if (parts.length == 1) return parts.first.substring(0, 1).toUpperCase();
+    return (parts.first.substring(0, 1) + parts[1].substring(0, 1)).toUpperCase();
+  }
+
+  void _setLoading(bool v) {
+    authLoading = v;
+    if (v) authError = null;
+    notifyListeners();
+  }
+
+  /// Single source of truth for navigation once auth state changes: a session
+  /// routes to the correct home; no session drops to onboarding.
+  void _onAuthChange(AuthState data) {
+    final session = data.session;
+    if (session == null) {
+      linkedApple = false;
+      linkedGoogle = false;
+      authLoading = false;
+      screen = AppScreen.onboard1;
+      notifyListeners();
+      return;
+    }
+    final meta = session.user.userMetadata ?? const <String, dynamic>{};
+    final storedMode = meta['mode'] as String?;
+    mode = storedMode == 'business' ? Mode.business : Mode.personal;
+    // OAuth (Google) users arrive without a mode — persist the one they picked.
+    if (storedMode == null) {
+      _sb.auth.updateUser(UserAttributes(data: {'mode': mode.name}));
+    }
+    authError = null;
+    authLoading = false;
+    screen = homeScreen;
+    notifyListeners();
+  }
+
+  bool _guardConfigured() {
+    if (_configured) return true;
+    authError = "Supabase isn't configured yet — paste your project URL and "
+        'anon key into lib/supabase_config.dart.';
+    notifyListeners();
+    return false;
+  }
+
+  void getStarted() => go(AppScreen.chooseType);
 
   void pickType(Mode m) {
     mode = m;
+    authError = null;
     go(AppScreen.signup);
   }
-
-  void submitSignup() => go(homeScreen);
 
   void setSigninMode(Mode m) {
     signinMode = m;
     notifyListeners();
   }
 
-  void submitSignin() {
-    mode = signinMode;
-    go(homeScreen);
+  Future<void> submitSignup({
+    required String email,
+    required String password,
+    required String fullName,
+    String? businessName,
+    String? category,
+  }) async {
+    if (!_guardConfigured()) return;
+    if (email.trim().isEmpty || password.isEmpty) {
+      authError = 'Enter your email and a password.';
+      notifyListeners();
+      return;
+    }
+    _setLoading(true);
+    try {
+      await _sb.auth.signUp(
+        email: email.trim(),
+        password: password,
+        data: {
+          'mode': mode.name,
+          'full_name': fullName.trim(),
+          if (mode == Mode.business && businessName != null)
+            'business_name': businessName.trim(),
+          if (mode == Mode.business && category != null) 'category': category.trim(),
+        },
+      );
+      // With a session, _onAuthChange routes home. Without one, the project
+      // has email confirmation enabled.
+      if (_sb.auth.currentSession == null) {
+        authError = 'Check your email to confirm your account, then sign in.';
+      }
+    } on AuthException catch (e) {
+      authError = e.message;
+    } catch (_) {
+      authError = 'Could not create your account. Please try again.';
+    } finally {
+      _setLoading(false);
+    }
   }
 
-  void googleAuthSignup() {
-    linkedGoogle = true;
-    go(homeScreen);
+  Future<void> submitSignin({required String email, required String password}) async {
+    if (!_guardConfigured()) return;
+    if (email.trim().isEmpty || password.isEmpty) {
+      authError = 'Enter your email and password.';
+      notifyListeners();
+      return;
+    }
+    _setLoading(true);
+    try {
+      await _sb.auth.signInWithPassword(email: email.trim(), password: password);
+      // _onAuthChange routes to the right home for this account.
+    } on AuthException catch (e) {
+      authError = e.message;
+    } catch (_) {
+      authError = 'Could not sign you in. Please try again.';
+    } finally {
+      _setLoading(false);
+    }
   }
 
-  void googleAuthSignin() {
-    mode = signinMode;
-    linkedGoogle = true;
-    go(homeScreen);
+  Future<void> googleAuth() async {
+    if (!_guardConfigured()) return;
+    _setLoading(true);
+    try {
+      await _sb.auth.signInWithOAuth(
+        OAuthProvider.google,
+        redirectTo: SupabaseConfig.oauthRedirect,
+      );
+      // Control leaves the app to the browser; the deep-link return fires
+      // _onAuthChange, which routes home.
+    } on AuthException catch (e) {
+      authError = e.message;
+    } catch (_) {
+      authError = 'Could not start Google sign-in.';
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  Future<void> logout() async {
+    signinMode = Mode.personal;
+    if (!_configured) {
+      linkedApple = false;
+      linkedGoogle = false;
+      go(AppScreen.onboard1);
+      return;
+    }
+    try {
+      await _sb.auth.signOut();
+      // _onAuthChange routes to onboarding.
+    } catch (_) {
+      go(AppScreen.onboard1);
+    }
   }
 
   // ---- split ----

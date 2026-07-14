@@ -1,10 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'shell.dart';
 import 'state.dart';
+import 'supabase_config.dart';
 import 'theme.dart';
 
-void main() => runApp(const TandemApp());
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  if (SupabaseConfig.isConfigured) {
+    await Supabase.initialize(
+      url: SupabaseConfig.url,
+      publishableKey: SupabaseConfig.anonKey,
+    );
+  }
+  runApp(const TandemApp());
+}
 
 class TandemApp extends StatefulWidget {
   const TandemApp({super.key});
