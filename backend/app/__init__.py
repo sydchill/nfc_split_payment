@@ -9,14 +9,40 @@ from werkzeug.exceptions import HTTPException
 
 # config.py calls load_dotenv() at import time, so .env is applied before any
 # config value is read.
-from .config import Config, TestConfig
+from .config import DEV_SECRET, Config, TestConfig
 from .extensions import cors, db, jwt, migrate
 from .services import ServiceError
+
+
+def _require_real_secrets(app: Flask) -> None:
+    """Refuse to serve production traffic with the placeholder secrets.
+
+    Everything sensitive comes from the environment (.env locally). If .env is
+    missing, the config falls back to the values printed in config.py — fine for
+    development, fatal in production: anyone with the source could sign their own
+    JWTs. Fail loudly at boot rather than quietly accept forged sessions.
+    """
+    if app.config.get("TESTING") or os.environ.get("FLASK_ENV") == "development":
+        return
+
+    missing = [
+        name
+        for name in ("SECRET_KEY", "JWT_SECRET_KEY")
+        if app.config.get(name) in (None, "", DEV_SECRET)
+    ]
+    if missing:
+        raise RuntimeError(
+            f"{', '.join(missing)} not set. Generate values with "
+            '`python -c "import secrets; print(secrets.token_urlsafe(48))"` and '
+            "put them in backend/.env (see .env.example). Refusing to start with "
+            "the placeholder key."
+        )
 
 
 def create_app(config_object: type[Config] | None = None) -> Flask:
     app = Flask(__name__)
     app.config.from_object(config_object or Config)
+    _require_real_secrets(app)
 
     db.init_app(app)
     migrate.init_app(app, db)

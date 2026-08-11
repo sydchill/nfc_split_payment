@@ -1,5 +1,7 @@
 """End-to-end API tests: auth, friends, splits, sales."""
 
+import json
+
 import pytest
 
 from app import (
@@ -398,3 +400,71 @@ def test_transactions_isolated_between_users(client):
     )
     assert len(client.get("/api/transactions", headers=a).get_json()) == 1
     assert client.get("/api/transactions", headers=b).get_json() == []
+
+
+# ---------------------------------------------------------------------------
+# Response hygiene
+# ---------------------------------------------------------------------------
+# `User.to_dict` is an allowlist, so a newly added column is excluded by
+# default. These tests fail if someone turns it into a column dump, or adds a
+# secret to the list — the credential material must never leave the server, and
+# `google_sub` is a stable identifier for the person across Google services.
+SECRET_USER_FIELDS = ("password_hash", "google_sub", "password")
+
+
+def _assert_no_secrets(payload: dict) -> None:
+    for field in SECRET_USER_FIELDS:
+        assert field not in payload, f"{field} leaked in {sorted(payload)}"
+
+
+def test_me_exposes_no_credential_material(client):
+    headers = auth_headers(client)
+    me = client.get("/api/auth/me", headers=headers).get_json()
+
+    _assert_no_secrets(me)
+    # The booleans the UI needs are derived, not the underlying values.
+    assert me["has_password"] is True
+    assert me["google_linked"] is False
+    # Nothing resembling the stored hash appears anywhere in the response.
+    assert "pbkdf2" not in json.dumps(me)
+
+
+def test_auth_responses_expose_no_credential_material(client, app, fake_google):
+    """Every endpoint that returns a user body, not just /me."""
+    _assert_no_secrets(
+        client.post(
+            "/api/auth/register",
+            json={"email": "new@example.com", "password": "hunter2pass"},
+        ).get_json()["user"]
+    )
+    _assert_no_secrets(
+        client.post(
+            "/api/auth/login",
+            json={"email": "new@example.com", "password": "hunter2pass"},
+        ).get_json()["user"]
+    )
+
+    app.config["GOOGLE_CLIENT_IDS"] = ["test-client-id"]
+    fake_google.update(
+        {"sub": "google-sub-hygiene", "email": "g@example.com", "email_verified": True}
+    )
+    _assert_no_secrets(
+        client.post("/api/auth/google", json={"id_token": "good"}).get_json()["user"]
+    )
+
+    headers = auth_headers(client, email="patch@example.com")
+    _assert_no_secrets(
+        client.patch(
+            "/api/auth/me", json={"full_name": "Renamed"}, headers=headers
+        ).get_json()
+    )
+
+
+def test_friends_do_not_leak_owner_identity(client):
+    """A friend row carries no owner id or email — only what the UI draws."""
+    headers = auth_headers(client)
+    client.post("/api/friends", json={"name": "Sam"}, headers=headers)
+
+    friend = client.get("/api/friends", headers=headers).get_json()[0]
+
+    assert set(friend) == {"id", "name", "color"}

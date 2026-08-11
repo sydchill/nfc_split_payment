@@ -11,13 +11,17 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
-class Config:
-    SECRET_KEY = os.environ.get("SECRET_KEY", "dev-secret-change-me")
+# Placeholder values used when .env is missing. They are deliberately obvious:
+# `create_app` refuses to start with them outside development, because a JWT
+# signing key that is published in this file lets anyone forge a session.
+DEV_SECRET = "dev-secret-change-me"
+DEV_DATABASE_URL = "postgresql+psycopg://patela:patela@localhost:5432/patela"
 
-    SQLALCHEMY_DATABASE_URI = os.environ.get(
-        "DATABASE_URL",
-        "postgresql+psycopg://patela:patela@localhost:5432/patela",
-    )
+
+class Config:
+    SECRET_KEY = os.environ.get("SECRET_KEY", DEV_SECRET)
+
+    SQLALCHEMY_DATABASE_URI = os.environ.get("DATABASE_URL", DEV_DATABASE_URL)
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     SQLALCHEMY_ENGINE_OPTIONS = {"pool_pre_ping": True}
 

@@ -66,11 +66,34 @@ flutter run --dart-define-from-file=env/dev.json
 `env/dev.json` points the app at the API — `http://10.0.2.2:5000` reaches your
 machine from an Android emulator; use your LAN IP for a physical phone.
 
+## Configuration & secrets
+
+Nothing sensitive lives in source. Both sides read their configuration from
+files that are **git-ignored**; only the `.example` templates are committed.
+
+| File | Holds | Committed |
+|------|-------|-----------|
+| `backend/.env` | DB URL, `SECRET_KEY`, `JWT_SECRET_KEY`, `GOOGLE_CLIENT_ID` | No |
+| `mobile/env/dev.json` | API base URL, Google client ids | No |
+| `backend/.env.example`, `mobile/env/*.json.example` | placeholders only | Yes |
+
+Two things worth knowing:
+
+- **The backend refuses to start** outside development if `SECRET_KEY` or
+  `JWT_SECRET_KEY` is missing or still the placeholder from `config.py`. A
+  signing key that ships in the source lets anyone forge a session, so this
+  fails loudly at boot instead of silently accepting forged tokens.
+- **`--dart-define` values are readable in the built APK.** OAuth *client ids*
+  belong there and are public by design — a stolen one is useless without the
+  app's signing certificate, and the backend verifies every token anyway. A
+  client *secret* must never go in `mobile/env/*.json`; the native and browser
+  sign-in flows don't use one (the browser flow uses PKCE instead).
+
 ## Tests
 
 ```bash
-cd backend && .venv\Scripts\python.exe -m pytest tests -q    # 20 API tests
-cd mobile  && flutter test                                    # 8 widget/golden tests
+cd backend && .venv\Scripts\python.exe -m pytest tests -q    # 26 API tests
+cd mobile  && flutter test                                    # 20 widget/unit tests
 ```
 
 ## Status
