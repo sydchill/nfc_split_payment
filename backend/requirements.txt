@@ -1,0 +1,22 @@
+Flask>=3.1,<4
+Flask-SQLAlchemy>=3.1,<4
+Flask-Migrate>=4.0,<5
+Flask-Cors>=5.0,<7
+Flask-JWT-Extended>=4.7,<5
+SQLAlchemy>=2.0,<3
+psycopg[binary]>=3.2,<4
+python-dotenv>=1.0,<2
+
+# Google Sign-In: verifies ID tokens against Google's public keys.
+# The [requests] extra pulls in the HTTP transport used to fetch those keys —
+# without it, `google.auth.transport.requests` raises ImportError at runtime.
+google-auth[requests]>=2.35,<3
+
+# production WSGI servers
+# gunicorn is Linux/macOS only (no Windows support) — used for deployment.
+gunicorn>=23.0; sys_platform != "win32"
+# waitress is the Windows-compatible equivalent, for local prod-mode testing.
+waitress>=3.0; sys_platform == "win32"
+
+# dev / test
+pytest>=8.0

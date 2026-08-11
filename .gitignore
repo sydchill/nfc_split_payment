@@ -1,7 +1,12 @@
+# ---------------------------------------------------------------------------
+# Patela monorepo
+#   mobile/   Flutter app
+#   backend/  Flask API
+# ---------------------------------------------------------------------------
+
 # Miscellaneous
 *.class
 *.log
-*.pyc
 *.swp
 .DS_Store
 .atom/
@@ -23,15 +28,17 @@ migrate_working_dir/
 # is commented out by default.
 #.vscode/
 
-# Flutter/Dart/Pub related
+# ---- Flutter / Dart / Pub (mobile/) ----
 **/doc/api/
 **/ios/Flutter/.last_build_id
 .dart_tool/
 .flutter-plugins-dependencies
 .pub-cache/
 .pub/
-/build/
-/coverage/
+/mobile/build/
+/mobile/coverage/
+# Golden-test failure output
+/mobile/test/failures/
 
 # Symbolication related
 app.*.symbols
@@ -40,6 +47,22 @@ app.*.symbols
 app.*.map.json
 
 # Android Studio will place build artifacts here
-/android/app/debug
-/android/app/profile
-/android/app/release
+/mobile/android/app/debug
+/mobile/android/app/profile
+/mobile/android/app/release
+
+# Mobile environment config (real values) — keep the .example templates only
+/mobile/env/*.json
+!/mobile/env/*.json.example
+
+# ---- Python / Flask (backend/) ----
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+# Backend secrets and local databases
+/backend/.env
+/backend/*.db
+/backend/instance/
+.pytest_cache/
