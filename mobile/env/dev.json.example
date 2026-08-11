@@ -3,5 +3,7 @@
   "_comment_api": "Android emulator reaches your dev machine at 10.0.2.2; use your LAN IP (e.g. http://192.168.1.20:5000) for a physical phone.",
   "API_BASE_URL": "http://10.0.2.2:5000",
   "_comment_google": "The WEB OAuth client id from Google Cloud Console — must match the backend's GOOGLE_CLIENT_ID. Leave empty to disable the Google button.",
-  "GOOGLE_SERVER_CLIENT_ID": "1234567890-abcdefg.apps.googleusercontent.com"
+  "GOOGLE_SERVER_CLIENT_ID": "1234567890-abcdefg.apps.googleusercontent.com",
+  "_comment_google_android": "The ANDROID OAuth client id. Only used for the browser fallback, which signs in devices that have no Google account. Add it to the backend's GOOGLE_CLIENT_ID list too (comma-separated) — tokens from this flow carry it as their audience. Leave empty to disable the fallback.",
+  "GOOGLE_ANDROID_CLIENT_ID": ""
 }

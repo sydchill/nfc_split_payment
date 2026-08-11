@@ -27,6 +27,17 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+            <!-- Catches the redirect back from Google's sign-in page in the
+                 browser (the fallback used when no Google account is on the
+                 device). The scheme must be the package name — that is what
+                 Google requires of an Android OAuth client's redirect URI.
+                 Handled by MainActivity.onNewIntent thanks to singleTop. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="com.example.split_nfc_payment"/>
+            </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->

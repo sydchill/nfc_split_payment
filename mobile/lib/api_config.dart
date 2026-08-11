@@ -28,6 +28,14 @@ class ApiConfig {
   static const String googleServerClientId =
       String.fromEnvironment('GOOGLE_SERVER_CLIENT_ID', defaultValue: '');
 
+  /// Google Sign-In: the **Android** OAuth client id from Google Cloud Console.
+  ///
+  /// Only used by the browser fallback ([GoogleWebSignInService]), which runs
+  /// when the device has no Google account for the native picker to offer.
+  /// Empty means no fallback — the app tells the user to add an account instead.
+  static const String googleAndroidClientId =
+      String.fromEnvironment('GOOGLE_ANDROID_CLIENT_ID', defaultValue: '');
+
   static bool get isProd => environment == 'prod';
 
   static bool get isConfigured => baseUrl.isNotEmpty;

@@ -32,14 +32,21 @@ abstract class GoogleAuthService {
 /// Wraps `google_sign_in` (v7) so the rest of the app only deals with an ID
 /// token, which the Flask backend verifies.
 class GoogleSignInService implements GoogleAuthService {
-  GoogleSignInService({GoogleSignIn? signIn})
+  GoogleSignInService({GoogleSignIn? signIn, this.fallback})
       : _signIn = signIn ?? GoogleSignIn.instance;
 
   final GoogleSignIn _signIn;
+
+  /// Used when the device has no Google account for the picker to offer —
+  /// normally the browser flow, which accepts any account.
+  final GoogleAuthService? fallback;
+
   bool _initialized = false;
 
   @override
-  bool get isConfigured => ApiConfig.googleServerClientId.isNotEmpty;
+  bool get isConfigured =>
+      ApiConfig.googleServerClientId.isNotEmpty ||
+      (fallback?.isConfigured ?? false);
 
   Future<void> _ensureInitialized() async {
     if (_initialized) return;
@@ -53,7 +60,10 @@ class GoogleSignInService implements GoogleAuthService {
   /// Runs the native account picker and returns Google's ID token.
   @override
   Future<GoogleSignInResult> signIn() async {
-    if (!isConfigured) {
+    final alt = fallback;
+    if (ApiConfig.googleServerClientId.isEmpty) {
+      // No native config; the browser flow can still carry the whole sign-in.
+      if (alt != null && alt.isConfigured) return alt.signIn();
       return const GoogleSignInResult.failed(
         'Google sign-in is not configured — set GOOGLE_SERVER_CLIENT_ID in '
         'env/dev.json.',
@@ -77,9 +87,24 @@ class GoogleSignInService implements GoogleAuthService {
       return GoogleSignInResult.token(token);
     } on GoogleSignInException catch (e) {
       if (e.code == GoogleSignInExceptionCode.canceled) {
+        // Play Services also reports a *configuration* failure as a cancel (an
+        // unregistered Android OAuth client shows up as
+        // `status=UNREGISTERED_ON_API_CONSOLE` in logcat, tag
+        // `Auth.Api.Credentials`), so log it rather than fail silently.
+        debugPrint(
+          'Google sign-in cancelled (${e.description ?? "no reason given"}). '
+          'If the picker was not dismissed by hand, check logcat for tag '
+          'Auth.Api.Credentials.',
+        );
         return const GoogleSignInResult.userCancelled();
       }
       debugPrint('GoogleSignInException(${e.code}): ${e.description}');
+      // No account on the device: hand over to the browser, which accepts any
+      // Google account without adding it to the phone.
+      if (isNoDeviceAccountError(e) && alt != null && alt.isConfigured) {
+        debugPrint('No device account — falling back to browser sign-in.');
+        return alt.signIn();
+      }
       return GoogleSignInResult.failed(_messageFor(e));
     } catch (e) {
       debugPrint('Google sign-in error: $e');
@@ -88,6 +113,14 @@ class GoogleSignInService implements GoogleAuthService {
       );
     }
   }
+
+  /// True when Play Services had no account to offer.
+  ///
+  /// The plugin reports this as an `unknownError` whose description it prefixes
+  /// with "No credential available", which is the only signal available here.
+  @visibleForTesting
+  static bool isNoDeviceAccountError(GoogleSignInException e) =>
+      (e.description ?? '').contains('No credential available');
 
   /// Turns a plugin failure into something a person can act on.
   ///
@@ -116,10 +149,16 @@ class GoogleSignInService implements GoogleAuthService {
   }
 
   /// Clears the cached Google account so the next sign-in shows the picker.
+  ///
+  /// Initializes first: after a restored session the app logs out without ever
+  /// having called [signIn], and skipping this would leave Google's cached
+  /// account behind.
   @override
   Future<void> signOut() async {
-    if (!_initialized) return;
+    await fallback?.signOut();
+    if (ApiConfig.googleServerClientId.isEmpty) return;
     try {
+      await _ensureInitialized();
       await _signIn.signOut();
     } catch (_) {
       // Non-fatal: the Patela session is cleared regardless.

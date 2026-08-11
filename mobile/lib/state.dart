@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import 'api_client.dart';
 import 'google_signin_service.dart';
+import 'google_web_signin.dart';
 import 'models.dart';
 import 'payments.dart';
 import 'repo.dart';
@@ -44,7 +45,10 @@ class AppState extends ChangeNotifier {
     PaymentTerminal? terminal,
     GoogleAuthService? google,
   })  : api = api,
-        google = google ?? (api != null ? GoogleSignInService() : null),
+        google = google ??
+            (api != null
+                ? GoogleSignInService(fallback: GoogleWebSignInService())
+                : null),
         repo = repo ?? (api != null ? ApiRepo(api) : InMemoryRepo()),
         terminal = terminal ?? MockTerminal();
 
