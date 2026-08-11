@@ -21,15 +21,24 @@ class GoogleSignInResult {
   bool get ok => idToken != null;
 }
 
+/// What [AppState] needs from Google sign-in. Kept abstract so tests can drive
+/// the flow without Google Play Services.
+abstract class GoogleAuthService {
+  bool get isConfigured;
+  Future<GoogleSignInResult> signIn();
+  Future<void> signOut();
+}
+
 /// Wraps `google_sign_in` (v7) so the rest of the app only deals with an ID
 /// token, which the Flask backend verifies.
-class GoogleSignInService {
+class GoogleSignInService implements GoogleAuthService {
   GoogleSignInService({GoogleSignIn? signIn})
       : _signIn = signIn ?? GoogleSignIn.instance;
 
   final GoogleSignIn _signIn;
   bool _initialized = false;
 
+  @override
   bool get isConfigured => ApiConfig.googleServerClientId.isNotEmpty;
 
   Future<void> _ensureInitialized() async {
@@ -42,6 +51,7 @@ class GoogleSignInService {
   }
 
   /// Runs the native account picker and returns Google's ID token.
+  @override
   Future<GoogleSignInResult> signIn() async {
     if (!isConfigured) {
       return const GoogleSignInResult.failed(
@@ -70,9 +80,7 @@ class GoogleSignInService {
         return const GoogleSignInResult.userCancelled();
       }
       debugPrint('GoogleSignInException(${e.code}): ${e.description}');
-      return GoogleSignInResult.failed(
-        e.description ?? 'Google sign-in failed. Please try again.',
-      );
+      return GoogleSignInResult.failed(_messageFor(e));
     } catch (e) {
       debugPrint('Google sign-in error: $e');
       return const GoogleSignInResult.failed(
@@ -81,7 +89,34 @@ class GoogleSignInService {
     }
   }
 
+  /// Turns a plugin failure into something a person can act on.
+  ///
+  /// The raw descriptions are written for developers ("No credential
+  /// available: ..."), so the common, recoverable cases get their own copy.
+  String _messageFor(GoogleSignInException e) {
+    final description = e.description ?? '';
+    if (description.contains('No credential available')) {
+      return 'No Google account on this device. Add one in Settings → '
+          'Passwords & accounts, then try again.';
+    }
+    switch (e.code) {
+      case GoogleSignInExceptionCode.providerConfigurationError:
+      case GoogleSignInExceptionCode.clientConfigurationError:
+        return 'Google sign-in is misconfigured for this build. Check that the '
+            'app id and signing certificate match an Android OAuth client.';
+      case GoogleSignInExceptionCode.uiUnavailable:
+        return 'Google sign-in could not open. Please try again.';
+      case GoogleSignInExceptionCode.interrupted:
+        return 'Google sign-in was interrupted. Please try again.';
+      default:
+        return description.isEmpty
+            ? 'Google sign-in failed. Please try again.'
+            : description;
+    }
+  }
+
   /// Clears the cached Google account so the next sign-in shows the picker.
+  @override
   Future<void> signOut() async {
     if (!_initialized) return;
     try {

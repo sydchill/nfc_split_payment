@@ -42,14 +42,14 @@ class AppState extends ChangeNotifier {
     ApiClient? api,
     Repo? repo,
     PaymentTerminal? terminal,
-    GoogleSignInService? google,
+    GoogleAuthService? google,
   })  : api = api,
         google = google ?? (api != null ? GoogleSignInService() : null),
         repo = repo ?? (api != null ? ApiRepo(api) : InMemoryRepo()),
         terminal = terminal ?? MockTerminal();
 
   final ApiClient? api;
-  final GoogleSignInService? google;
+  final GoogleAuthService? google;
   final Repo repo;
   final PaymentTerminal terminal;
 
